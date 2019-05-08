@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:jee="http://www.springframework.org/schema/jee"
+       xmlns:cache="http://www.springframework.org/schema/cache"
+       xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xmlns:lang="http://www.springframework.org/schema/lang"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
+		http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-3.2.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.2.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-3.2.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-3.2.xsd
+        http://www.springframework.org/schema/cache http://www.springframework.org/schema/spring-cache.xsd
+        http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc.xsd
+        http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee.xsd
+        http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd
+        http://www.springframework.org/schema/lang http://www.springframework.org/schema/lang/spring-lang.xsd">
+
+
+    <!-- 启动注解
+          排除service 注解
+    -->
+    <context:component-scan base-package="com.sz">
+        <context:exclude-filter type="annotation" expression="org.springframework.stereotype.Service" />
+    </context:component-scan>
+    <context:component-scan base-package="com.sz.controller" />
+    <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+
+        <property name="prefix" value="/jsp/" />
+        <property name="suffix" value=".jsp" />
+    </bean>
+
+
+    <!-- 静态资源处理 -->
+    <mvc:default-servlet-handler />
+
+
+    <mvc:annotation-driven />
+
+
+
+    <context:property-placeholder location="classpath:jdbc.properties"/>
+    <!-- 配置数据源 -->
+
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+        <property name="driverClass" value="${jdbc.driver}" />
+        <property name="jdbcUrl" value="${jdbc.url}" />
+        <property name="user" value="${jdbc.username}" />
+        <property name="password" value="${jdbc.password}" />
+
+        <!-- 连接池的大小-->
+        <property name="maxPoolSize" value="30"/>
+        <property name="minPoolSize" value="10"/>
+
+        <!-- 获取连接超时时间 -->
+        <property name="checkoutTimeout" value="100000" />
+
+        <!-- 关闭连接后自动commit -->
+        <property name="autoCommitOnClose" value="false" />
+        <!-- 当获取连接失败重试次数-->
+        <property name="acquireRetryAttempts" value="2" />
+    </bean>
+
+    <!--  注入一股mybatis 的sqlsessionFactory -->
+    <bean id="sqlSessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
+
+        <!--配置数据源 -->
+        <property name="dataSource" ref="dataSource"/>
+
+        <!--
+            1. 引入mappers 文件
+            <property name= "configLoction" value ="classpath:sqlConfig.xml"></property>
+
+            这就要求所有的mapper文件必须在com/sz/mapper 之下
+         -->
+
+        <property name="mapperLocations" value="classpath:com/sz/mapper/**/*.xml" />
+
+        <property name="configuration">
+            <bean class="org.apache.ibatis.session.Configuration">
+                <!--  可以加入驼峰命名， 其他mybatis的配置也就是mybatis.cfg.xml的相关配置都会转移到这里来-->
+                <property name="mapUnderscoreToCamelCase" value="true"/>
+            </bean>
+        </property>
+
+        <!-- 插件配置 -->
+        <property name="plugins">
+            <array>
+                <bean class="com.github.pagehelper.PageInterceptor">
+                    <property name="properties">
+                        <value>
+                            helperDialect=mysql
+                            reasonable=true
+                            supportMethodsArguments=true
+                            params=count=countSql
+                            autoRuntimeDialect=true
+                        </value>
+                    </property>
+                </bean>
+            </array>
+        </property>
+
+    </bean>
+    <!-- <bean id="userMapper" class="org.mybatis.spring.mapper.MapperFactoryBean" >
+        <property name="mapperInterface" value="cn.itcast.dao.UserDao"></property>
+        <property name="sqlSessionFactory" ref="sqlSessionFactory"></property>
+    </bean> -->
+
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.sz.mapper" />
+        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactoryBean" />
+
+    </bean>
+
+
+    <!-- 事务管理，使用数据源事务管理类进行管理 -->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource" />
+    </bean>
+    <!-- 确定事务管理的策略，transaction-manage:指向上面的transactionManage -->
+    <tx:advice transaction-manager="transactionManager" id="transactionAdvice">
+        <tx:attributes>
+            <tx:method name="select*" read-only="true"/>
+            <tx:method name="get*" read-only="true" />
+            <tx:method name="query*" read-only="true" />
+            <tx:method name="delete*" propagation="REQUIRED" rollback-for="Exception"  />
+            <tx:method name="update*" propagation="REQUIRED" rollback-for="Exception"  />
+            <tx:method name="insert*" propagation="REQUIRED" rollback-for="Exception"  />
+            <tx:method name="add*" propagation="REQUIRED" rollback-for="Exception"  />
+        </tx:attributes>
+    </tx:advice>
+    <aop:config >
+        <aop:pointcut id="txCut" expression="execution(* com.sz.service..*.*(..))" />
+        <aop:advisor advice-ref="transactionAdvice" pointcut-ref="txCut"/>
+    </aop:config>
+    <!-- 采用注解进行事务配置，请在service 的实现类上面加载@Transactional 注解-->
+    <tx:annotation-driven transaction-manager="transactionManager" />
+</beans>
